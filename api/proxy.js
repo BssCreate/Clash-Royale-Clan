@@ -1,6 +1,6 @@
 // api/proxy.js
 export default async function handler(req, res) {
-  // Добавляем CORS заголовки
+  // CORS заголовки
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
@@ -10,19 +10,35 @@ export default async function handler(req, res) {
     return;
   }
 
-  // 🔍 DEBUG ЭНДПОИНТ ДЛЯ ПРОВЕРКИ IP
+  // 🔥 УЛУЧШЕННЫЙ DEBUG-ЭНДПОИНТ
   if (req.query.debug === 'ip') {
-    // Vercel передает IP в заголовках
-    const ip = req.headers['x-forwarded-for'] || 
-               req.headers['x-real-ip'] || 
-               req.socket.remoteAddress;
-    
-    // Информация о запросе для отладки
+    // Собираем все возможные источники IP
+    const possibleIps = {
+      'x-forwarded-for': req.headers['x-forwarded-for'],
+      'x-real-ip': req.headers['x-real-ip'],
+      'x-vercel-forwarded-for': req.headers['x-vercel-forwarded-for'],
+      'x-vercel-proxy-signature': req.headers['x-vercel-proxy-signature'] ? 'present' : 'missing',
+      'socket.remoteAddress': req.socket.remoteAddress,
+      'connection.remoteAddress': req.connection.remoteAddress
+    };
+
+    // Пытаемся сделать тестовый запрос к внешнему сервису, чтобы узнать IP, под которым мы выходим в интернет
+    let externalIp = 'Не удалось определить';
+    try {
+      const ipResponse = await fetch('https://api.ipify.org?format=json');
+      const ipData = await ipResponse.json();
+      externalIp = ipData.ip;
+    } catch (e) {
+      externalIp = `Ошибка: ${e.message}`;
+    }
+
     return res.status(200).json({
-      yourServerIp: ip,
-      allHeaders: req.headers,
-      message: 'Скопируйте этот IP и добавьте в API ключ на developer.clashroyale.com',
-      timestamp: new Date().toISOString()
+      message: '🔍 Информация для отладки IP',
+      externalIp: externalIp, // IP, с которого ваш сервер виден в интернете
+      possibleIps: possibleIps, // Все IP из заголовков запроса к прокси
+      headers: req.headers,
+      timestamp: new Date().toISOString(),
+      instruction: 'Скопируйте значение "externalIp" и добавьте его в белый список API ключа на developer.clashroyale.com'
     });
   }
 
