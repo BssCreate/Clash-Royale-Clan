@@ -35,28 +35,21 @@ export default async function handler(req, res) {
     });
   }
 
-  // Проверяем наличие токена
   const API_TOKEN = process.env.CLASH_API_TOKEN;
   if (!API_TOKEN) {
     return res.status(500).json({ error: 'API token not configured' });
   }
 
   try {
-    // Получаем путь из запроса (убираем /api/ и возможные query параметры)
     const urlPath = req.url.replace('/api/', '').split('?')[0];
     const apiUrl = `https://api.clashroyale.com/v1/${urlPath}`;
-    
-    console.log('Proxying to:', apiUrl); // Для отладки в логах Vercel
+    console.log('Proxying to:', apiUrl);
     
     const response = await fetch(apiUrl, {
-      headers: {
-        'Authorization': `Bearer ${API_TOKEN}`
-      }
+      headers: { 'Authorization': `Bearer ${API_TOKEN}` }
     });
     
     const data = await response.json();
-    
-    // Добавляем заголовки ответа
     res.status(response.status).json(data);
   } catch (error) {
     console.error('Proxy error:', error);
