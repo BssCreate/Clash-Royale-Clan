@@ -168,58 +168,145 @@
         <footer>Данные предоставлены Clash Royale API</footer>
     </div>
 
-        <script>
-        // Конфигурация
-        const CLAN_TAG = 'G89JVCUL'; // без #
-        
-        // Используем наш прокси на Vercel
-        const BASE_URL = '/api'; // Относительный путь к прокси
-        
-        // Эндпоинты
-        const CLAN_URL = `${BASE_URL}/clans/%23${CLAN_TAG}`;
-        const MEMBERS_URL = `${BASE_URL}/clans/%23${CLAN_TAG}/members`;
+<script>
+    const CLAN_TAG = 'G89JVCUL';
+    
+    // Базовый URL вашего Vercel приложения
+    const BASE_URL = 'https://clash-royale-clan.vercel.app/'; // ЗАМЕНИТЕ НА ВАШ URL
+    
+    // Эндпоинты через прокси
+    const CLAN_URL = `${BASE_URL}/api/clans/%23${CLAN_TAG}`;
+    const MEMBERS_URL = `${BASE_URL}/api/clans/%23${CLAN_TAG}/members`;
 
-        // Элементы DOM
-        const clanInfoDiv = document.getElementById('clanInfo');
-        const membersDiv = document.getElementById('membersList');
-        const errorDiv = document.getElementById('errorMessage');
-        const loadingDiv = document.getElementById('loading');
+    // Элементы DOM
+    const clanInfoDiv = document.getElementById('clanInfo');
+    const membersDiv = document.getElementById('membersList');
+    const errorDiv = document.getElementById('errorMessage');
+    const loadingDiv = document.getElementById('loading');
 
-        // Функция для загрузки данных
-        async function fetchData(url) {
-            const response = await fetch(url);
-            if (!response.ok) {
-                throw new Error(`Ошибка HTTP: ${response.status}`);
+    // Сначала проверим работу прокси
+    async function testProxy() {
+        try {
+            const testResponse = await fetch(`${BASE_URL}/api/proxy?test=1`);
+            const testData = await testResponse.json();
+            console.log('Proxy test:', testData);
+            return true;
+        } catch (error) {
+            console.error('Proxy test failed:', error);
+            errorDiv.innerHTML = `Прокси не работает: ${error.message}. Проверьте настройки Vercel.`;
+            errorDiv.style.display = 'block';
+            return false;
+        }
+    }
+
+    async function fetchData(url) {
+        const response = await fetch(url);
+        if (!response.ok) {
+            if (response.status === 403) {
+                throw new Error('403 Forbidden - проверьте API ключ и IP адреса');
             }
-            return await response.json();
+            if (response.status === 404) {
+                throw new Error('404 Not Found - проверьте URL');
+            }
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        return await response.json();
+    }
+
+    async function loadClanData() {
+        try {
+            loadingDiv.style.display = 'block';
+            errorDiv.style.display = 'none';
+
+            // Сначала тестируем прокси
+            const proxyOk = await testProxy();
+            if (!proxyOk) {
+                loadingDiv.style.display = 'none';
+                return;
+            }
+
+            // Загружаем данные
+            const [clanData, membersData] = await Promise.all([
+                fetchData(CLAN_URL),
+                fetchData(MEMBERS_URL)
+            ]);
+
+            displayClanInfo(clanData);
+            displayMembers(membersData.items);
+            loadingDiv.style.display = 'none';
+        } catch (error) {
+            console.error('Ошибка загрузки:', error);
+            loadingDiv.style.display = 'none';
+            errorDiv.style.display = 'block';
+            errorDiv.textContent = `Не удалось загрузить данные: ${error.message}`;
+        }
+    }
+
+    function displayClanInfo(clan) {
+        const warTrophies = clan.clanWarTrophies || 0;
+        const clanScore = clan.clanScore || 0;
+        const members = clan.members || 0;
+        const requiredTrophies = clan.requiredTrophies || 0;
+        const type = clan.type ? clan.type.replace('_', ' ') : 'Не указан';
+        const location = clan.location ? clan.location.name : 'Не указано';
+
+        let html = `
+            <div class="clan-badge">${clan.name ? clan.name.charAt(0) : 'C'}</div>
+            <div class="clan-info">
+                <h2>${clan.name} (${clan.tag})</h2>
+                <p>🏷️ Описание: ${clan.description || 'Нет описания'}</p>
+                <div class="stat-grid">
+                    <div class="stat-card"><span>🏆 ${clanScore}</span>Трофеи клана</div>
+                    <div class="stat-card"><span>⚔️ ${warTrophies}</span>Трофеи войны</div>
+                    <div class="stat-card"><span>👥 ${members}/50</span>Участников</div>
+                    <div class="stat-card"><span>📊 ${requiredTrophies}</span>Мин. трофеи</div>
+                </div>
+                <p>🌍 Локация: ${location} | 🔓 Тип: ${type}</p>
+            </div>
+        `;
+        clanInfoDiv.innerHTML = html;
+    }
+
+    function displayMembers(members) {
+        if (!members || members.length === 0) {
+            membersDiv.innerHTML = '<p>Нет данных об участниках</p>';
+            return;
         }
 
-        // Остальные функции (displayClanInfo, displayMembers) остаются без изменений
-        // Загрузка информации о клане и участниках
-        async function loadClanData() {
-            try {
-                loadingDiv.style.display = 'block';
-                errorDiv.style.display = 'none';
+        members.sort((a, b) => b.trophies - a.trophies);
 
-                const [clanData, membersData] = await Promise.all([
-                    fetchData(CLAN_URL),
-                    fetchData(MEMBERS_URL)
-                ]);
+        let html = '';
+        members.forEach(member => {
+            const role = member.role.toLowerCase();
+            const roleDisplay = {
+                'leader': 'Лидер',
+                'coLeader': 'Соруководитель',
+                'elder': 'Старейшина',
+                'member': 'Участник'
+            }[role] || role;
 
-                displayClanInfo(clanData);
-                displayMembers(membersData.items);
-                loadingDiv.style.display = 'none';
-            } catch (error) {
-                console.error('Ошибка загрузки:', error);
-                loadingDiv.style.display = 'none';
-                errorDiv.style.display = 'block';
-                errorDiv.textContent = `Не удалось загрузить данные: ${error.message}`;
-            }
-        }
+            html += `
+                <div class="member-card">
+                    <div class="member-icon">${member.name ? member.name.charAt(0) : '?'}</div>
+                    <div class="member-info">
+                        <div class="member-name">${member.name}</div>
+                        <div class="member-role">${roleDisplay}</div>
+                        <div class="member-trophies">
+                            <span class="trophy-icon">🏆</span> ${member.trophies} 
+                            <span style="color: #7fffd4; margin-left: 10px;">📦 ${member.donations || 0}</span>
+                        </div>
+                        <div class="donations">⭐ Уровень: ${member.expLevel || '?'}</div>
+                    </div>
+                </div>
+            `;
+        });
 
-        // Запуск
-        loadClanData();
-        setInterval(loadClanData, 300000);
-    </script>
+        membersDiv.innerHTML = html;
+    }
+
+    // Запуск
+    loadClanData();
+    setInterval(loadClanData, 300000);
+</script>
 </body>
 </html>
